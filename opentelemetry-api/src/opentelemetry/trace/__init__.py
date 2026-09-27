@@ -566,10 +566,13 @@ def get_tracer_provider() -> TracerProvider:
     if _TRACER_PROVIDER is None:
         # if a global tracer provider has not been set either via code or env
         # vars, return a proxy tracer provider
+        # 如果没有配置默认是ProxyTracerProvider
         if OTEL_PYTHON_TRACER_PROVIDER not in os.environ:
             return _PROXY_TRACER_PROVIDER
 
+        # 如果配置了加载配置的tracer_provider
         tracer_provider: TracerProvider = _load_provider(OTEL_PYTHON_TRACER_PROVIDER, "tracer_provider")
+        # 将_TRACER_PROVIDER设置为加载的tracer_provider
         _set_tracer_provider(tracer_provider, log=False)
     # _TRACER_PROVIDER will have been set by one thread
     return cast("TracerProvider", _TRACER_PROVIDER)

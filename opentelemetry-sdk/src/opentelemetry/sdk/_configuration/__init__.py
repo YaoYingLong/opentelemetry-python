@@ -643,6 +643,7 @@ class _OTelSDKConfigurator(_BaseConfigurator):
     """
 
     def _configure(self, **kwargs):
+        # 读取环境变量OTEL_CONFIG_FILE赋值给config_file，判断变量是否真值（不为None、非空字符串）
         if config_file := environ.get(OTEL_CONFIG_FILE):
             # Declarative configuration lives in the separate
             # ``opentelemetry-configuration`` package. Import lazily so the
@@ -673,4 +674,5 @@ class _OTelSDKConfigurator(_BaseConfigurator):
                 )
             configure_sdk(load_config_file(config_file))
             return
+        # 不论是否配置了配置文件，初始化组件
         _initialize_components(**kwargs)
