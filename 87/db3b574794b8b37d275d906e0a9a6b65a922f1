@@ -1,0 +1,25 @@
+opentelemetry-api/src/opentelemetry/trace/__init__.py
+  s_47e84d5c42d9ea::t_999511dcfcd91d 244
+opentelemetry-sdk/src/opentelemetry/sdk/_configuration/__init__.py
+  s_47e84d5c42d9ea::t_999511dcfcd91d 243
+exporter/opentelemetry-exporter-otlp-proto-grpc/src/opentelemetry/exporter/otlp/proto/grpc/exporter.py
+  s_47e84d5c42d9ea::t_999511dcfcd91d 299
+opentelemetry-api/src/opentelemetry/util/_providers.py
+  s_47e84d5c42d9ea::t_999511dcfcd91d 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "87db3b574794b8b37d275d906e0a9a6b65a922f1",
+  "prompts": {},
+  "sessions": {
+    "s_47e84d5c42d9ea": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ec95-6d30-7881-acc3-19aa64e6ab8b",
+        "model": "gpt-6-sol"
+      },
+      "human_author": "yaoyinglong <yinglong.yao@ly.com>"
+    }
+  }
+}
