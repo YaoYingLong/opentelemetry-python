@@ -241,6 +241,7 @@ class _DefaultTracerProvider(NoOpTracerProvider):
     """
 
 
+# 未设置全局 Provider 时先返回代理；之后注册 Provider，已有 ProxyTracer 也会转用实际 Tracer。
 class ProxyTracerProvider(TracerProvider):
     def get_tracer(
         self,
@@ -435,9 +436,13 @@ class ProxyTracer(Tracer):
     def start_span(self, *args, **kwargs) -> Span:  # type: ignore
         return self._tracer.start_span(*args, **kwargs)  # type: ignore
 
+    # 把底层创建的 Span 提供给调用方，并让这个 Span 的作用范围覆盖调用方的整个 with 代码块。
     @_agnosticcontextmanager  # type: ignore
     def start_as_current_span(self, *args, **kwargs) -> Iterator[Span]:
+        # with进入时，调用__enter__()，__enter__()推进生成器，直到执行到yield span
+        # next(self.gen)得到被yield出来的Span，__enter__()返回该Span，外层as span接收这个返回值
         with self._tracer.start_as_current_span(*args, **kwargs) as span:  # type: ignore
+            # 把 Span 交给调用方，暂停当前方法的执行
             yield span
 
 
@@ -545,7 +550,7 @@ def _set_tracer_provider(tracer_provider: TracerProvider, log: bool) -> None:
     def set_tp() -> None:
         global _TRACER_PROVIDER  # pylint: disable=global-statement
         _TRACER_PROVIDER = tracer_provider
-
+    # do_once的作用就是通过锁的方式控制只执行一次set_tp函数，给全局变量_TRACER_PROVIDER赋值一次
     did_set = _TRACER_PROVIDER_SET_ONCE.do_once(set_tp)
 
     if log and not did_set:
@@ -600,10 +605,14 @@ def use_span(
             this mechanism if it was previously set manually.
     """
     try:
+        # 先把新建的span设置到Context中的_SPAN_KEY中，然后执行attach，相当于java中执行context的makeCurrent方法
+        # 底层使用的是contextvars上下文变量，将当前的Context设置contextvars上下文变量中，并返回detach需要用到的token
         token = context_api.attach(context_api.set_value(_SPAN_KEY, span))
         try:
+            # 这里使用了生成器，完美解决了span的作用范围，真是神来之笔
             yield span
         finally:
+            # 恢复contextvars上下文变量中attach之前的Context
             context_api.detach(token)
 
     # Record only exceptions that inherit Exception class but not BaseException, because
@@ -631,6 +640,7 @@ def use_span(
         raise
 
     finally:
+        # 如果设置了end_on_exit需要结束span，该值默认是false，但是传入一般是true
         if end_on_exit:
             span.end()
 

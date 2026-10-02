@@ -27,8 +27,9 @@ class Once:
         # fast path, try to avoid locking
         if self._done:
             return False
-
+        # 如果获取锁成功执行里面的内容
         with self._lock:
+            # 如果没有完成执行里面的内容
             if not self._done:
                 func()
                 self._done = True

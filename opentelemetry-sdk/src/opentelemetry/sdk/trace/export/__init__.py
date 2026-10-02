@@ -168,20 +168,24 @@ class BatchSpanProcessor(SpanProcessor):
         meter_provider: MeterProvider | None = None,
     ):
         if max_queue_size is None:
+            # 最大队列默认2048
             max_queue_size = BatchSpanProcessor._default_max_queue_size()
 
         if schedule_delay_millis is None:
+            # 默认每5秒执行一次
             schedule_delay_millis = BatchSpanProcessor._default_schedule_delay_millis()
 
         if max_export_batch_size is None:
+            # 默认每个批次512条span
             max_export_batch_size = BatchSpanProcessor._default_max_export_batch_size()
 
         # Not used. No way currently to pass timeout to export.
         if export_timeout_millis is None:
+            # 默认超时时间30秒
             export_timeout_millis = BatchSpanProcessor._default_export_timeout_millis()
-
+        # 参数校验
         BatchSpanProcessor._validate_arguments(max_queue_size, schedule_delay_millis, max_export_batch_size)
-
+        # 启动执行BatchProcessor中的worker线程
         self._batch_processor = BatchProcessor(
             span_exporter,
             schedule_delay_millis,

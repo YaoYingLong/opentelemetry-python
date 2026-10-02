@@ -296,6 +296,7 @@ class OTLPExporterMixin(ABC, Generic[SDKDataT, ExportServiceRequestT, ExportResu
             else:
                 insecure = parsed_url.scheme == "http"
 
+        # 解析出 netloc 时以它作为 gRPC channel 目标，URL path 不决定 RPC 方法路径。
         if parsed_url.netloc:
             self._endpoint = parsed_url.netloc
 

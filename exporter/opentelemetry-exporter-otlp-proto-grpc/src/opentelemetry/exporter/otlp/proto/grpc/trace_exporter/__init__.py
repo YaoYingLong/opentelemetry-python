@@ -113,6 +113,7 @@ class OTLPSpanExporter(
 
         OTLPExporterMixin.__init__(
             self,
+            # TraceServiceStub初始化时把Export绑定到/opentelemetry.proto.collector.trace.v1.TraceService/Export。
             stub=TraceServiceStub,
             result=SpanExportResult,
             endpoint=endpoint or environ.get(OTEL_EXPORTER_OTLP_TRACES_ENDPOINT),

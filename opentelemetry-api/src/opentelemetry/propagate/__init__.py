@@ -101,6 +101,7 @@ def inject(
         setter: An optional `Setter` object that can set values
             on the carrier.
     """
+    # 执行TextMapPropagator的inject方法，注入traceparent、tracestate、baggage等
     get_global_textmap().inject(carrier, context=context, setter=setter)
 
 

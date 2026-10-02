@@ -279,6 +279,7 @@ class ConcurrentMultiSpanProcessor(SpanProcessor):
         span: "Span",
         parent_context: context_api.Context | None = None,
     ) -> None:
+        # 遍历_span_processors列表，将sp.on_start提交到线程池中批量执行
         self._submit_and_await(lambda sp: sp.on_start, span, parent_context=parent_context)
 
     def _on_ending(self, span: "Span") -> None:
@@ -946,11 +947,13 @@ class Span(trace_api.Span, ReadableSpan):
         parent_context: context_api.Context | None = None,
     ) -> None:
         with self._lock:
+            # 如果传入了时间使用传入时间
             if self._start_time is not None:
                 logger.warning("Calling start() on a started span.")
                 return
+            # 如果没有传入开始时间，创建记录开始时间
             self._start_time = start_time if start_time is not None else time_ns()
-
+        # 一般来说_span_processor是BatchSpanProcessor，一般来说默认什么都不做
         self._span_processor.on_start(self, parent_context=parent_context)
 
     def end(self, end_time: int | None = None) -> None:
@@ -1104,6 +1107,7 @@ class Tracer(trace_api.Tracer):
         """If the tracer is not enabled, start_span will create a NonRecordingSpan"""
         return self._tracer_config.is_enabled
 
+    # _agnosticcontextmanager把yield生成器行为接到with协议上，其实就是将生成器包装成_AgnosticContextManager
     @_agnosticcontextmanager  # pylint: disable=protected-access
     def start_as_current_span(
         self,
@@ -1115,8 +1119,11 @@ class Tracer(trace_api.Tracer):
         start_time: int | None = None,
         record_exception: bool = True,
         set_status_on_exception: bool = True,
+        # 需要注意的是这里end_on_exit默认是true，表示当with结束会自动调用span得end方法
         end_on_exit: bool = True,
     ) -> Iterator[trace_api.Span]:
+        # 一般来说不会传入context，创建一个新的span，判断是不是根节点，如果不是需要创建traceId，如果是就复用traceId
+        # 以及根据采样判断是否需要执行span得start方法
         span = self.start_span(
             name=name,
             context=context,
@@ -1127,13 +1134,17 @@ class Tracer(trace_api.Tracer):
             record_exception=record_exception,
             set_status_on_exception=set_status_on_exception,
         )
+        # 将span设置到Context中的_SPAN_KEY中，然后将Context保存到contextvars上下文变量中
+        # 需要注意的是这里end_on_exit默认是true，表示当with结束会自动调用span得end方法
         with trace_api.use_span(
             span,
             end_on_exit=end_on_exit,
             record_exception=record_exception,
             set_status_on_exception=set_status_on_exception,
         ) as span:
+            # 构造器，先把这个 Span 交出去，我停在这里，之后还能继续执行
             yield span
+            # with退出后会恢复contextvars上下文变量中之前的Context对象
 
     def start_span(  # pylint: disable=too-many-locals
         self,
@@ -1147,8 +1158,10 @@ class Tracer(trace_api.Tracer):
         set_status_on_exception: bool = True,
     ) -> trace_api.Span:
         links = links or ()
+        # 获取当前Span对象，并从Span中获取父的SpanContext对象
         parent_span_context = trace_api.get_current_span(context).get_span_context()
 
+        # 如果parent_span_context非空，且类型不是SpanContext抛出异常
         if parent_span_context is not None and not isinstance(parent_span_context, trace_api.SpanContext):
             raise TypeError("parent_span_context must be a SpanContext or None.")
 
@@ -1158,8 +1171,10 @@ class Tracer(trace_api.Tracer):
         # is_valid determines root span
         if parent_span_context is None or not parent_span_context.is_valid:
             parent_span_context = None
+            # 如果父的SpanContext对象为None，或者是无效的，重新构建一个trace_id
             trace_id = self.id_generator.generate_trace_id()
         else:
+            # 如果父的SpanContext对象有效，使用父的SpanContext对象中的trace_id
             trace_id = parent_span_context.trace_id
 
         # The sampler decides whether to create a real or no-op span at the
@@ -1183,7 +1198,7 @@ class Tracer(trace_api.Tracer):
 
         if random_trace_id:
             trace_flags = trace_api.TraceFlags(trace_flags | trace_api.TraceFlags.RANDOM_TRACE_ID)
-
+        # 构建当前Span的SpanContext对象
         span_context = trace_api.SpanContext(
             trace_id,
             self.id_generator.generate_span_id(),
@@ -1195,6 +1210,7 @@ class Tracer(trace_api.Tracer):
         record_end_metrics = self._tracer_metrics.start_span(parent_span_context, sampling_result.decision)
 
         # Only record if is_recording() is true
+        # 如果采样返回的RECORD_ONLY或RECORD_AND_SAMPLE，需要开启录制Span
         if sampling_result.decision.is_recording():
             # pylint:disable=protected-access
             span = _Span(
@@ -1214,6 +1230,7 @@ class Tracer(trace_api.Tracer):
                 instrumentation_scope=self._instrumentation_scope,
                 record_end_metrics=record_end_metrics,
             )
+            # 其实仅仅是记录开始时间，执行配置的SpanProcessor的on_start方法
             span.start(start_time=start_time, parent_context=context)
         else:
             span = trace_api.NonRecordingSpan(context=span_context)
@@ -1262,8 +1279,10 @@ class TracerProvider(trace_api.TracerProvider):
         meter_provider: metrics_api.MeterProvider | None = None,
         _tracer_configurator: _TracerConfiguratorT | None = None,
     ) -> None:
+        # 默认使用按注册顺序转发事件的SynchronousMultiSpanProcessor；传入参数时使用指定实现
         self._active_span_processor = active_span_processor or SynchronousMultiSpanProcessor()
         if id_generator is None:
+            # spanId和traceId生成器
             self.id_generator = RandomIdGenerator()
         else:
             self.id_generator = id_generator
@@ -1287,12 +1306,15 @@ class TracerProvider(trace_api.TracerProvider):
         self._tracers_lock = threading.Lock()
         self._tracers: dict[InstrumentationScope, Tracer] = {}
         if hasattr(os, "register_at_fork"):
+            # 给实例方法 self._handle_fork 创建弱引用，避免这个引用延长 self 的生命周期
             weak_at_fork = weakref.WeakMethod(self._handle_fork)
 
             def _after_in_child() -> None:
+                # 获取绑定方法，不执行 _handle_fork
                 if at_fork := weak_at_fork():
+                    # 真正执行 _handle_fork
                     at_fork()
-
+            # 会持续持有注册的回调，可以让子进程在fork后重建锁、更新进程相关资源，同时避免fork回调一直强引用着TracerProvider实例
             os.register_at_fork(after_in_child=_after_in_child)
 
     def _handle_fork(self) -> None:

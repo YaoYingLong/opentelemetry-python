@@ -22,8 +22,10 @@ def _load_runtime_context() -> _RuntimeContext:
     Returns:
         An instance of RuntimeContext.
     """
+    # 从环境变量中获取OTEL_PYTHON_CONTEXT
     configured_context = os.environ.get(OTEL_PYTHON_CONTEXT)
     if not configured_context:
+        # 如果configured_context为空
         return ContextVarsRuntimeContext()
 
     # pylint: disable=import-outside-toplevel,no-name-in-module
@@ -68,6 +70,7 @@ def get_value(key: str, context: Context | None = None) -> object:
     Returns:
         The value associated with the key.
     """
+    # 如果context不为空，则从context字典中获取key为_SPAN_KEY的内容，否则
     return context.get(key) if context is not None else get_current().get(key)
 
 

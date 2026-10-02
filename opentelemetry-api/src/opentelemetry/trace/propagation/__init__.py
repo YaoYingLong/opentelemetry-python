@@ -6,6 +6,7 @@ from opentelemetry.context.context import Context
 from opentelemetry.trace.span import INVALID_SPAN, Span
 
 SPAN_KEY = "current-span"
+# 返回的是一个：current-span + "-" + str(uuid4())
 _SPAN_KEY = create_key("current-span")
 
 
@@ -31,7 +32,9 @@ def get_current_span(context: Context | None = None) -> Span:
     Returns:
         The Span set in the context if it exists. INVALID_SPAN otherwise.
     """
+    # get_value的作用是从context中获取key为_SPAN_KEY的对象
     span = get_value(_SPAN_KEY, context=context)
     if span is None or not isinstance(span, Span):
+        # 如果没有获取到span，或者类型不是Span，就返回INVALID_SPAN
         return INVALID_SPAN
     return span

@@ -21,6 +21,7 @@ def _load_provider(provider_environment_variable: str, provider: str) -> Provide
     )
 
     try:
+        # 回退值是入口点名称；default_tracer_provider 在 API 包中映射到 NoOpTracerProvider。
         provider_name = cast(
             str,
             environ.get(provider_environment_variable, f"default_{provider}"),

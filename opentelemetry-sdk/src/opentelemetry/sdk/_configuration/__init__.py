@@ -112,12 +112,14 @@ class _ConfigurationExporterLogRecordProcessorT(Protocol):
 
 def _import_config_components(selected_components: Sequence[str], entry_point_name: str) -> list[tuple[str, type]]:
     component_implementations = []
-
+    # selected_components为传入的exporter_names
     for selected_component in selected_components:
         try:
             component_implementations.append(
                 (
                     selected_component,
+                    # entry_point_name为opentelemetry_traces_exporter、opentelemetry_metrics_exporter、opentelemetry_log_exporter
+                    # 其实就是加载/Volumes/extra/SourceCode/opentelemetry-python/exporter中匹配的exporter names对应的组件
                     next(iter(entry_points(group=entry_point_name, name=selected_component))).load(),
                 )
             )
@@ -153,6 +155,7 @@ def _get_logger_configurator() -> str | None:
 
 
 def _get_exporter_entry_point(exporter_name: str, signal_type: Literal["traces", "metrics", "logs"]):
+    # 如果exporter_name不属于_EXPORTER_OTLP、_EXPORTER_OTLP_PROTO_GRPC、_EXPORTER_OTLP_PROTO_HTTP就直接返回原始名称
     if exporter_name not in (
         _EXPORTER_OTLP,
         _EXPORTER_OTLP_PROTO_GRPC,
@@ -161,20 +164,26 @@ def _get_exporter_entry_point(exporter_name: str, signal_type: Literal["traces",
         return exporter_name
 
     # Checking env vars for OTLP protocol (grpc/http).
+    # 通过类型获取对应的环境变量产量值，然后从环境变量中获取对应的otlp_protocol
+    # 如果没有配置兜底使用OTEL_EXPORTER_OTLP_PROTOCOL配置的内容
     otlp_protocol = environ.get(_PROTOCOL_ENV_BY_SIGNAL_TYPE[signal_type]) or environ.get(OTEL_EXPORTER_OTLP_PROTOCOL)
-
+    # 如果没有配置otlp_protocol
     if not otlp_protocol:
         if exporter_name == _EXPORTER_OTLP:
+            # 如果exporter_name配置的是otlp，返回otlp_proto_grpc
             return _EXPORTER_OTLP_PROTO_GRPC
+        # 如果有配置otlp_protocol，但是exporter_name不是_EXPORTER_OTLP，直接返回传入的exporter_name
         return exporter_name
 
+    # 如果有配置otlp_protocol，去掉首位空白
     otlp_protocol = otlp_protocol.strip()
-
+    # 如果exporter_name配置的是otlp
     if exporter_name == _EXPORTER_OTLP:
+        # 如果配置的otlp_protocol既不是grpc也不是http/protobuf，直接抛出异常
         if otlp_protocol not in _EXPORTER_BY_OTLP_PROTOCOL:
             # Invalid value was set by the env var
             raise RuntimeError(f"Unsupported OTLP protocol '{otlp_protocol}' is configured")
-
+        # 返回对应的grpc或http/protobuf对应的otlp_proto_grpc或otlp_proto_http
         return _EXPORTER_BY_OTLP_PROTOCOL[otlp_protocol]
 
     # grpc/http already specified by exporter_name, only add a warning in case
@@ -189,15 +198,17 @@ def _get_exporter_entry_point(exporter_name: str, signal_type: Literal["traces",
 
     return exporter_name
 
-
+# 获取exporter_name列表
 def _get_exporter_names(
     signal_type: Literal["traces", "metrics", "logs"],
 ) -> list[str]:
+    # 这里传入的signal_type是：traces、metrics、logs之一，其实就是读取对应的环境变量
     names = environ.get(_EXPORTER_ENV_BY_SIGNAL_TYPE.get(signal_type, ""))
 
+    # 如果没有配置或者配置none就返回空列表
     if not names or names.lower().strip() == "none":
         return []
-
+    # 函数表达式，将names按照逗号拆分开，然后返回exporter_name列表，仅仅支持otlp、otlp_proto_grpc、otlp_proto_http
     return [_get_exporter_entry_point(_exporter.strip(), signal_type) for _exporter in names.split(",")]
 
 
@@ -211,23 +222,28 @@ def _init_tracing(
     export_span_processor: _ConfigurationExporterSpanProcessorT | None = None,
     tracer_configurator: _TracerConfiguratorT | None = None,
 ):
+    # 自动配置创建SDK Provider，并尝试将其注册为全局TracerProvider。
     provider = TracerProvider(
         id_generator=id_generator,
         sampler=sampler,
         resource=resource,
         _tracer_configurator=tracer_configurator,
     )
+    # 将provider赋值给全局变量_TRACER_PROVIDER，且即使多次执行也仅仅赋值一次
     set_tracer_provider(provider)
 
     exporter_args_map = exporter_args_map or {}
+    # 默认是BatchSpanProcessor
     export_processor = export_span_processor or BatchSpanProcessor
 
     span_processors = span_processors or []
     for span_processor in span_processors:
         provider.add_span_processor(span_processor)
 
+    # 每个 exporter 实例交给导出处理器；默认使用 BatchSpanProcessor，也可通过 export_span_processor 指定。
     for _, exporter_class in exporters.items():
         exporter_args = exporter_args_map.get(exporter_class, {})
+        # 执行BatchSpanProcessor的构造方法，然后将实例添加到provider中
         provider.add_span_processor(export_processor(exporter_class(**exporter_args)))
 
 
@@ -548,8 +564,11 @@ def _initialize_components(
     if log_exporter_names is None:
         log_exporter_names = []
     span_exporters, metric_exporters, log_exporters = _import_exporters(
+        # 获取traces的exporter_name列表
         trace_exporter_names + _get_exporter_names("traces"),
+        # 获取metrics的exporter_name列表
         metric_exporter_names + _get_exporter_names("metrics"),
+        # 获取logs的exporter_name列表
         log_exporter_names + _get_exporter_names("logs"),
     )
     if sampler is None:
@@ -672,6 +691,8 @@ class _OTelSDKConfigurator(_BaseConfigurator):
                     OTEL_CONFIG_FILE,
                     sorted(kwargs),
                 )
+            # 通过load_config_file加载配置文件并将内容解析为OpenTelemetryConfiguration
+            # 通过configure_sdk完成_initialize_components后直接退出
             configure_sdk(load_config_file(config_file))
             return
         # 不论是否配置了配置文件，初始化组件

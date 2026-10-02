@@ -113,6 +113,7 @@ class BatchProcessor(Generic[Telemetry]):
         self._shutdown_timeout_exceeded = False
         self._export_lock = threading.Lock()
         self._worker_awaken = threading.Event()
+        # 启动执行self.worker线程
         self._worker_thread.start()
         if hasattr(os, "register_at_fork"):
             weak_reinit = weakref.WeakMethod(self._at_fork_reinit)
@@ -151,11 +152,13 @@ class BatchProcessor(Generic[Telemetry]):
         self._worker_thread.start()
         self._pid = os.getpid()
 
+    # 跟java中的实现逻辑类似
     def worker(self):
         while not self._shutdown:
             # Lots of strategies in the spec for setting next timeout.
             # https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#batching-processor.
             # Shutdown will interrupt this sleep. Emit will interrupt this sleep only if the queue is bigger then threshold.
+            # 若有数据会打断等待直接执行执行导出，
             sleep_interrupted = self._worker_awaken.wait(self._schedule_delay)
             if self._shutdown:
                 break
@@ -184,6 +187,7 @@ class BatchProcessor(Generic[Telemetry]):
                 # Record on submission to the exporter.
                 self._metrics.finish_items(count)
                 try:
+                    # 导出数据到收集器
                     self._exporter.export(batch)
                 except Exception:  # pylint: disable=broad-exception-caught
                     _logger.exception("Exception while exporting %s.", self._exporting)
@@ -191,17 +195,22 @@ class BatchProcessor(Generic[Telemetry]):
 
     def emit(self, data: Telemetry) -> None:
         if self._shutdown:
+            # 如果已经shutdown
             _logger.info("Shutdown called, ignoring %s.", self._exporting)
             self._metrics.drop_items(1, "already_shutdown")
             return
         if self._pid != os.getpid():
+            # 如果pid不相等
             self._bsp_reset_once.do_once(self._at_fork_reinit)
         if len(self._queue) == self._max_queue_size:
             _logger.warning("Queue full, dropping %s.", self._exporting)
             self._metrics.drop_items(1)
         # This will drop a log from the right side if the queue is at _max_queue_size.
+        # 将span添加到队列末尾
         self._queue.appendleft(data)
+        # 如果队列内容大于一个批次的span数量，且当前导出器处理等待状态
         if len(self._queue) >= self._max_export_batch_size and not self._worker_awaken.is_set():
+            # 发送唤醒事件，唤醒阻塞
             self._worker_awaken.set()
 
     def shutdown(self, timeout_millis: int = 30000):

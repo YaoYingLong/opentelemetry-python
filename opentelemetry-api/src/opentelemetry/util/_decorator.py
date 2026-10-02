@@ -41,6 +41,7 @@ class _AgnosticContextManager(
     https://github.com/open-telemetry/opentelemetry-python/pull/3633
     """
 
+    # 其实就是针对with关键字的，使用with时默认调用__enter__方法
     def __enter__(self) -> R:
         """Reimplementing __enter__ to avoid the type error.
 
@@ -48,6 +49,7 @@ class _AgnosticContextManager(
         """
         del self.args, self.kwds, self.func  # type: ignore
         try:
+            # 触发生成器
             return next(self.gen)  # type: ignore
         except StopIteration:
             raise RuntimeError("generator didn't yield") from None
@@ -63,12 +65,14 @@ class _AgnosticContextManager(
             return async_wrapper  # type: ignore
         return super().__call__(func)  # type: ignore
 
-
+# 把yield生成器行为接到with协议上，其实就是将生成器包装成_AgnosticContextManager
 def _agnosticcontextmanager(
     func: "Callable[P, Iterator[R]]",
 ) -> "Callable[P, _AgnosticContextManager[R]]":
     @functools.wraps(func)
     def helper(*args: Pargs, **kwargs: Pkwargs) -> _AgnosticContextManager[R]:  # pyright: ignore [reportInvalidTypeVarUse]
+        # 传入的func其实是一个生成器，将其包装为_AgnosticContextManager对象，如果在with关键字中调用
+        # 就会自动调用_AgnosticContextManager的__enter__方法，该方法其实就是调用next(self.gen)触发生成器
         return _AgnosticContextManager(func, args, kwargs)  # pyright: ignore [reportArgumentType]
 
     # Ignoring the type to keep the original signature of the function

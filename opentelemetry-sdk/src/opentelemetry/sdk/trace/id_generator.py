@@ -57,13 +57,17 @@ class RandomIdGenerator(IdGenerator):
     """
 
     def generate_span_id(self) -> int:
+        # 生成包含 64 个伪随机二进制位的非负整数，返回类型是 Python 的 int
         span_id = random.getrandbits(64)
+        # 如果生成的是无效的span_id，再次生成直到不是无效的为止
         while span_id == trace.INVALID_SPAN_ID:
             span_id = random.getrandbits(64)
         return span_id
 
     def generate_trace_id(self) -> int:
+        # 生成包含 128 个伪随机二进制位的非负整数，返回类型是 Python 的 int
         trace_id = random.getrandbits(128)
+        # 如果生成的是无效的trace_id，再次生成直到不是无效的为止
         while trace_id == trace.INVALID_TRACE_ID:
             trace_id = random.getrandbits(128)
         return trace_id
